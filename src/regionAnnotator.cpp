@@ -27,7 +27,7 @@ class regionAnnotator : public DrawingAnnotator
     std::string name;
   };
 
-  typedef pcl::PointXYZRGBA PointT;
+  typedef pcl::PointXYZ PointT;
 
   double pointSize;
   float border;
@@ -56,6 +56,7 @@ public:
   {
     outInfo("initialize");
 
+    /*
     if(ctx.isParameterDefined("border"))
     {
       ctx.extractValue("border", border);
@@ -64,7 +65,7 @@ public:
     if(ctx.isParameterDefined("region_to_filter"))
     {
       ctx.extractValue("region_to_filter", regionToLookAt);
-    }
+      }*/
     return UIMA_ERR_NONE;
   }
 
@@ -79,14 +80,17 @@ private:
   {
     MEASURE_TIME;
     outInfo("process begins");
-     rs::SceneCas cas(tcas);
+    rs::SceneCas cas(tcas);
     rs::Scene scene = cas.getScene();
-
-    if(!cas.get(VIEW_CLOUD, *cloud))
-      {
-        outInfo("NO POINTCLOUD");
-      }
+    cas.get(VIEW_CLOUD, *cloud);
     
+     if(!cas.get(VIEW_CLOUD, *cloud))
+       {
+         outInfo("NO POINTCLOUD");
+       }else
+       {
+	 outInfo("Yes POINTCLOUD");
+       }
     cas.get(VIEW_COLOR_IMAGE_HD, color);
    
     indices->clear();
@@ -101,6 +105,7 @@ private:
     {
       outInfo("No camera to world transformation!!!");
     }
+    
     //worldToCam = tf::StampedTransform(camToWorld.inverse(), camToWorld.stamp_, camToWorld.child_frame_id_, camToWorld.frame_id_);
 
     //default place to look for objects is counter tops except if we got queried for some different place
@@ -109,6 +114,15 @@ private:
     rs::Query qs = rs::create<rs::Query>(tcas);
     outInfo("TEST1");
     //outInfo(qs);
+    
+    /* if(!cas.get("QUERY", qs))
+      {
+      outInfo("THIS WONT WORK");
+      }else
+      {
+	outInfo("This is working");
+      }
+
     if(cas.get("QUERY", qs))
     {
       outInfo(qs.location());
@@ -119,37 +133,65 @@ private:
         regionToLookAt = nameMapping[qs.location()];
       }
     }
+    */
+    // regions.clear();
     outInfo("TEST2");
+        if(regions.empty())
+	  {
+	    outInfo("it is");
+	  }else{
+	  outInfo("It is not");
+	  outInfo(regions.size());
+	  outInfo(regions[0].width);
+	  outInfo(regions[0].depth);
+	  outInfo(regions[0].height);
+	  outInfo(regions[0].name);
+	}
+	outInfo(regions.size());
+
     if(regions.empty())
     {
+      outInfo("IS empty");
       std::vector<rs::SemanticMapObject> semanticRegions;
+      outInfo("IS empty1");
       outWarn("Region before filtering: " << regionToLookAt);
+      outInfo("IS empty2");
       getSemanticMapEntries(cas, regionToLookAt, semanticRegions);
       outInfo("GET THE SIZES OF THE ELEMENTS INSIDE THE SEM.MAP");
       outInfo(semanticRegions.size());
+      outInfo("IS empty3");
       regions.resize(semanticRegions.size());
+      outInfo("IS empty4");
       for(size_t i = 0; i < semanticRegions.size(); ++i)
       {
-        std::size_t found = semanticRegions[i].name().find("galtelli_avalanche");
+	outInfo(semanticRegions[i].name());
+        std::size_t found = semanticRegions[i].name().find("River");      outInfo("IS empty5");
         if(regionToLookAt == "galtelli_river" && found == std::string::npos)
         {
           continue;
         }
+	outInfo("IS empty6");
         Region &region = regions[i];
-
+	outInfo("IS empty7");
         region.width = semanticRegions[i].width();
-        region.depth = semanticRegions[i].depth();
-        region.height = semanticRegions[i].height();
-        region.name = semanticRegions[i].name();
+	outInfo("IS empty8");
+	region.depth = semanticRegions[i].depth();
+	outInfo("IS empty9");
+	region.height = semanticRegions[i].height();
+	outInfo("IS empty10");
+	region.name = semanticRegions[i].name();
+	outInfo("IS empty11");
         rs::conversion::from(semanticRegions[i].transform(), region.transform);
       }
     }
-
+    
     outInfo("TEST3");
     for(size_t i = 0; i < regions.size(); ++i)
     {
+      outInfo("Inside the loop");
       filterRegion(regions[i]);
     }
+    /*
     outInfo("TEST4");
     pcl::ExtractIndices<PointT> ei;
     ei.setKeepOrganized(true);
@@ -157,7 +199,7 @@ private:
     ei.filterDirectly(cloud);
     outInfo("TEST5");
     cas.set(VIEW_CLOUD, *cloud);
-    outInfo("TEST6");
+    outInfo("TEST6"); */
     return UIMA_ERR_NONE;
   }
 
@@ -165,7 +207,7 @@ private:
   {
     
     outInfo("getSemanticMapEntries");
-    outInfo("name. ");
+    outInfo("name: ");
     outInfo(name);
     std::vector<rs::SemanticMapObject> objects;
     cas.get(VIEW_SEMANTIC_MAP, objects);
@@ -182,31 +224,37 @@ private:
 
   void filterRegion(const Region &region)
   {
+    outInfo("region");
+    outInfo(region.name);
+    outInfo(region.width);
+    outInfo(border);
     const float minX = -(region.width / 2) + border;
+    outInfo(minX);
     const float maxX = (region.width / 2) - border;
+    outInfo(maxX);
     float minY = -(region.height / 2) + border;
+    outInfo(minY);
     const float maxY = (region.height / 2) - border;
+    outInfo(maxY);
     const float minZ = -(region.depth / 2);
+    outInfo(minZ);
     const float maxZ = 0.5;
-
+    outInfo(maxZ);
+    
     //needed because of crappy sem map
     if(region.name == "River")
     {
       minY += 1;//don't get point for the sink
     }
-    else if(region.name == "galtelli_mountains")
-    {
-      minY += 0.8; //same for the hot plate
-    }
-
+  
     tf::Transform transform;
     transform = region.transform.inverse(); // * camToWorld;
-
+    // outInfo(transform);
     Eigen::Affine3d eigenTransform;
-    tf::transformTFToEigen(transform, eigenTransform);
-
+    //   tf::transformTFToEigen(transform, eigenTransform);
+    
     pcl::PointCloud<PointT>::Ptr transformed(new pcl::PointCloud<PointT>());
-
+    /*
     pcl::transformPointCloud<PointT>(*cloud, *transformed, eigenTransform);
 
     for(size_t i = 0; i < transformed->points.size(); ++i)
@@ -217,10 +265,12 @@ private:
         indices->push_back(i);
       }
     }
+    */
   }
-
+  /*
   void drawImageWithLock(cv::Mat &disp)
   {
+    
     disp = cv::Mat::zeros(cloud->height, cloud->width, CV_8UC3);
     cv::Vec3b white;
     white.val[0] = white.val[1] = white.val[2] = 255;
@@ -232,11 +282,11 @@ private:
       disp.at<cv::Vec3b>(index / disp.cols, index % disp.cols) = white;
     }
   }
-
+*/
   void fillVisualizerWithLock(pcl::visualization::PCLVisualizer &visualizer, const bool firstRun)
   {
-    const std::string &cloudname = this->name;
-
+    //  const std::string &cloudname = this->name;
+    /*
     if(firstRun)
     {
       visualizer.addPointCloud(cloud, cloudname);
@@ -299,6 +349,7 @@ private:
 
       visualizer.addCube(translation.cast<float>(), rotation.cast<float>(), region.width, region.height, region.depth, oss.str());
     }
+    */
   }
 };
 // This macro exports an entry point that is used to create the annotator.

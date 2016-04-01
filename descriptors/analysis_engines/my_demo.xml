@@ -145,7 +145,7 @@
       <fixedFlow>
 	<node>pclAnnotator</node>
 	<node>semAnnotator</node>
-	<node>regionAnnotator</node>
+	<!--node>regionAnnotator</node-->
       <!--node>ImagePreprocessor</node-->
 
       <!--node>PointCloudFilter</node>
